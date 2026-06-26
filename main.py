@@ -20,19 +20,20 @@ TOOLS = [
 ]
 
 
-def run_bash_command(command: str) -> str:
+def run_bash_command(command: str) -> tuple[str, int | None]:
     dangerous_commands = ["su", "sudo", "reboot", "shutdown"]
 
     if any(dangerous_command in command for dangerous_command in dangerous_commands):
-        return "Error: Dangerous command blocked"
+        return "Error: Dangerous command blocked", None
 
     try:
         result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=20)
-        return f"Exit code: {result.returncode}\nStdout: {result.stdout}\nStderr: {result.stderr}"
+        output = f"Exit code: {result.returncode}\nStdout: {result.stdout}\nStderr: {result.stderr}"
+        return output, result.returncode
     except subprocess.TimeoutExpired:
-        return "Error: Timeout (20s)"
+        return "Error: Timeout (20s)", None
     except Exception as e:
-        return f"Error: {e}"
+        return f"Error: {e}", None
 
 
 def main():
@@ -74,16 +75,20 @@ def main():
 
             for block in response.content:
                 if block.type == "tool_use":
-                    print(f"\033[34m$ {block.input['command']}\033[0m")
+                    command = block.input["command"]
+                    command_output, exit_code = run_bash_command(command)
 
-                    command_output = run_bash_command(block.input["command"])
+                    command_color = "31" if (exit_code is not None and exit_code != 0) else "33"  # Red, Yellow
+                    print(f"\033[{command_color}m$ {command}\033[0m")
+
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
                         "content": command_output,
                     })
 
-                    print(command_output)
+                    for line in command_output.splitlines():
+                        print(f"\033[90m| {line}\033[0m")  # Gray
 
             messages.append({"role": "user", "content": tool_results})
 
