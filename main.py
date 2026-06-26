@@ -19,7 +19,7 @@ def main():
     messages = []
 
     while True:
-        message = input("\033[36m>> \033[0m")
+        message = input("\033[36m>> \033[0m")  # Cyan
 
         if message.strip().lower() == "q":
             break
@@ -42,7 +42,7 @@ def main():
 
         for block in response_content:
             if block.type == "thinking":
-                print(f"\033[90;3m{block.thinking}\033[0m")
+                print(f"\033[90;3m{block.thinking}\033[0m")  # Gray
             elif block.type == "text":
                 print(block.text)
 
