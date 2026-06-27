@@ -3,7 +3,9 @@ name = "pegasus"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"  # ty uses the minimum of this range as its python-version
+# Ruff uses the minimum of this range as its target-version — https://docs.astral.sh/ruff/settings/#target-version
+# ty uses the minimum of this range as its python-version — https://docs.astral.sh/ty/python-version/
+requires-python = ">=3.10"
 dependencies = [
     "anthropic>=0.109.1",
     "python-dotenv>=1.2.2",
