@@ -13,3 +13,13 @@ Update the `rev` of [pre-commit-hooks](https://github.com/pre-commit/pre-commit-
 uv run pre-commit install
 uv run pre-commit run --all-files
 ```
+
+## Ruff
+
+```bash
+uv add --dev ruff
+```
+
+Configure lint rules per the [official guide](https://docs.astral.sh/ruff/linter/#rule-selection).
+
+Wire up the pre-commit hook following the [integrations guide](https://docs.astral.sh/ruff/tutorial/#integrations).
