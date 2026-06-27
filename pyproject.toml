@@ -3,7 +3,7 @@ name = "pegasus"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10"  # ty uses the minimum of this range as its python-version
 dependencies = [
     "anthropic>=0.109.1",
     "python-dotenv>=1.2.2",
@@ -13,6 +13,7 @@ dependencies = [
 dev = [
     "pre-commit>=4.6.0",
     "ruff>=0.15.20",
+    "ty==0.0.55",  # keep in sync with the ty rev in .pre-commit-config.yaml
 ]
 
 [tool.ruff.lint]
