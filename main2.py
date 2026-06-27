@@ -140,7 +140,8 @@ def main():
         stream = agent.stream_events({"messages": messages}, version="v3")
 
         for snapshot in stream.values:
-            latest_message = snapshot["messages"][-1]
+            messages = snapshot["messages"]
+            latest_message = messages[-1]
 
             if isinstance(latest_message, HumanMessage):
                 continue
