@@ -122,7 +122,7 @@ def main():
         sys.exit(os.EX_CONFIG)
 
     agent = create_agent(
-        model=init_chat_model(f"openai:{model_id}", max_tokens=1000),
+        model=init_chat_model(model_id, max_tokens=1000),
         tools=TOOLS,
         system_prompt=f"You are a personal ai assistant at {WORKDIR}. Use tools to solve tasks. Act, don't explain.",  # noqa: E501
     )
