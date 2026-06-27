@@ -11,4 +11,5 @@ Update the `rev` of [pre-commit-hooks](https://github.com/pre-commit/pre-commit-
 
 ```bash
 uv run pre-commit install
+uv run pre-commit run --all-files
 ```
