@@ -1,5 +1,4 @@
 import glob
-import json
 import os
 import subprocess
 import sys
@@ -12,7 +11,7 @@ from langchain.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain.tools import tool
 
 
-@tool("bash")
+@tool("bash", response_format="content_and_artifact")
 def run_bash_command(command: str) -> tuple[str, bool]:
     """Run a bash command."""
     dangerous_commands = ["su", "sudo", "reboot", "shutdown"]
@@ -41,7 +40,7 @@ def ensure_workdir_path(relative_path: str) -> Path:
     return resolved_path
 
 
-@tool("glob")
+@tool("glob", response_format="content_and_artifact")
 def glob_files(pattern: str) -> tuple[str, bool]:
     """Find files matching a glob pattern."""
     try:
@@ -55,7 +54,7 @@ def glob_files(pattern: str) -> tuple[str, bool]:
         return f"Error: {e}", False
 
 
-@tool
+@tool(response_format="content_and_artifact")
 def read_text_file(file_path: str, max_lines: int | None = None) -> tuple[str, bool]:
     """Read text file."""
     try:
@@ -69,7 +68,7 @@ def read_text_file(file_path: str, max_lines: int | None = None) -> tuple[str, b
         return f"Error: {e}", False
 
 
-@tool
+@tool(response_format="content_and_artifact")
 def write_text_file(file_path: str, text: str) -> tuple[str, bool]:
     """Write text file."""
     try:
@@ -82,7 +81,7 @@ def write_text_file(file_path: str, text: str) -> tuple[str, bool]:
         return f"Error: {e}", False
 
 
-@tool("edit_text_file")
+@tool("edit_text_file", response_format="content_and_artifact")
 def replace_first_in_file(
     file_path: str, old_text: str, new_text: str
 ) -> tuple[str, bool]:
@@ -162,7 +161,8 @@ def main():
                         elif content_block["type"] == "text":
                             print(content_block["text"])
             elif isinstance(latest_message, ToolMessage):
-                value, ok = json.loads(latest_message.content)
+                value = latest_message.content
+                ok = latest_message.artifact
 
                 prompt = pending_tool_prompts.pop(latest_message.tool_call_id)
                 prompt_color = "33" if ok else "31"  # Yellow, Red
