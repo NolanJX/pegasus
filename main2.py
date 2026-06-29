@@ -110,6 +110,67 @@ TOOLS = [
 ]
 
 
+def agent_loop(
+    agent, messages: list[AnyMessage]
+) -> tuple[list[AnyMessage], AIMessage | None]:
+    final_message: AIMessage | None = None
+
+    pending_tool_prompts: dict[str, str] = {}
+    stream = agent.stream_events({"messages": messages}, version="v3")
+
+    for snapshot in stream.values:
+        messages = snapshot["messages"]
+        latest_message = messages[-1]
+
+        if isinstance(latest_message, HumanMessage):
+            continue
+
+        if isinstance(latest_message, AIMessage):
+            if latest_message.tool_calls:
+                for tool_call in latest_message.tool_calls:
+                    if tool_call["name"] == "bash":
+                        prompt = f"$ {tool_call['args']['command']}"
+                    else:
+                        prompt = f"[{tool_call['name']}] {tool_call['args']}"
+
+                    pending_tool_prompts[tool_call["id"]] = prompt
+            else:
+                final_message = latest_message
+        elif isinstance(latest_message, ToolMessage):
+            value = latest_message.content
+            ok = latest_message.artifact
+
+            prompt = pending_tool_prompts.pop(latest_message.tool_call_id)
+            prompt_color = "33" if ok else "31"  # Yellow, Red
+            print(f"\033[{prompt_color}m{prompt}\033[0m")
+
+            for line in value.splitlines():
+                print(f"\033[90m| {line}\033[0m")  # Gray
+
+    return messages, final_message
+
+
+def chat_loop(agent, messages: list[AnyMessage]):
+    while True:
+        message = input("\033[36m>> \033[0m")  # Cyan
+
+        if message.strip().lower() == "q":
+            break
+
+        messages.append(HumanMessage(message))
+
+        messages, final_message = agent_loop(agent, messages)
+
+        if final_message is None:
+            continue
+
+        for content_block in final_message.content_blocks:
+            if content_block["type"] == "reasoning":
+                print(f"\033[90;3m{content_block['reasoning']}\033[0m")
+            elif content_block["type"] == "text":
+                print(content_block["text"])
+
+
 def main():
     load_dotenv(override=True)
 
@@ -127,49 +188,7 @@ def main():
     )
     messages: list[AnyMessage] = []
 
-    while True:
-        message = input("\033[36m>> \033[0m")  # Cyan
-
-        if message.strip().lower() == "q":
-            break
-
-        messages.append(HumanMessage(message))
-
-        pending_tool_prompts = {}
-        stream = agent.stream_events({"messages": messages}, version="v3")
-
-        for snapshot in stream.values:
-            messages = snapshot["messages"]
-            latest_message = messages[-1]
-
-            if isinstance(latest_message, HumanMessage):
-                continue
-
-            if isinstance(latest_message, AIMessage):
-                if latest_message.tool_calls:
-                    for tool_call in latest_message.tool_calls:
-                        if tool_call["name"] == "bash":
-                            prompt = f"$ {tool_call['args']['command']}"
-                        else:
-                            prompt = f"[{tool_call['name']}] {tool_call['args']}"
-
-                        pending_tool_prompts[tool_call["id"]] = prompt
-                else:
-                    for content_block in latest_message.content_blocks:
-                        if content_block["type"] == "reasoning":
-                            print(f"\033[90;3m{content_block['reasoning']}\033[0m")
-                        elif content_block["type"] == "text":
-                            print(content_block["text"])
-            elif isinstance(latest_message, ToolMessage):
-                value = latest_message.content
-                ok = latest_message.artifact
-
-                prompt = pending_tool_prompts.pop(latest_message.tool_call_id)
-                prompt_color = "33" if ok else "31"  # Yellow, Red
-                print(f"\033[{prompt_color}m{prompt}\033[0m")
-
-                for line in value.splitlines():
-                    print(f"\033[90m| {line}\033[0m")  # Gray
+    chat_loop(agent, messages)
 
 
 if __name__ == "__main__":
