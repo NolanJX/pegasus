@@ -115,37 +115,42 @@ def agent_loop(
 ) -> tuple[list[AnyMessage], AIMessage | None]:
     final_message: AIMessage | None = None
 
+    seen_message_count = len(messages)
     pending_tool_prompts: dict[str, str] = {}
+
     stream = agent.stream_events({"messages": messages}, version="v3")
 
     for snapshot in stream.values:
         messages = snapshot["messages"]
-        latest_message = messages[-1]
+        unseen_messages = messages[seen_message_count:]
 
-        if isinstance(latest_message, HumanMessage):
-            continue
+        for message in unseen_messages:
+            if isinstance(message, HumanMessage):
+                continue
 
-        if isinstance(latest_message, AIMessage):
-            if latest_message.tool_calls:
-                for tool_call in latest_message.tool_calls:
-                    if tool_call["name"] == "bash":
-                        prompt = f"$ {tool_call['args']['command']}"
-                    else:
-                        prompt = f"[{tool_call['name']}] {tool_call['args']}"
+            if isinstance(message, AIMessage):
+                if message.tool_calls:
+                    for tool_call in message.tool_calls:
+                        if tool_call["name"] == "bash":
+                            prompt = f"$ {tool_call['args']['command']}"
+                        else:
+                            prompt = f"[{tool_call['name']}] {tool_call['args']}"
 
-                    pending_tool_prompts[tool_call["id"]] = prompt
-            else:
-                final_message = latest_message
-        elif isinstance(latest_message, ToolMessage):
-            value = latest_message.content
-            ok = latest_message.artifact
+                        pending_tool_prompts[tool_call["id"]] = prompt
+                else:
+                    final_message = message
+            elif isinstance(message, ToolMessage):
+                value = message.content
+                ok = message.artifact
 
-            prompt = pending_tool_prompts.pop(latest_message.tool_call_id)
-            prompt_color = "33" if ok else "31"  # Yellow, Red
-            print(f"\033[{prompt_color}m{prompt}\033[0m")
+                prompt = pending_tool_prompts.pop(message.tool_call_id)
+                prompt_color = "33" if ok else "31"  # Yellow, Red
+                print(f"\033[{prompt_color}m{prompt}\033[0m")
 
-            for line in value.splitlines():
-                print(f"\033[90m| {line}\033[0m")  # Gray
+                for line in value.splitlines():
+                    print(f"\033[90m| {line}\033[0m")  # Gray
+
+        seen_message_count = len(messages)
 
     return messages, final_message
 
