@@ -4,10 +4,9 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import cast
 
 from anthropic import Anthropic
-from anthropic.types import ContentBlock, MessageParam, ToolParam, ToolResultBlockParam
+from anthropic.types import Message, MessageParam, ToolParam, ToolResultBlockParam
 from dotenv import load_dotenv
 
 
@@ -162,6 +161,70 @@ TOOL_HANDLERS: dict[str, Callable[..., tuple[str, bool]]] = {
 }
 
 
+def agent_loop(
+    client: Anthropic, model_id: str, messages: list[MessageParam]
+) -> Message:
+    while True:
+        response = client.messages.create(
+            model=model_id,
+            max_tokens=1000,
+            messages=messages,
+            system=f"You are a personal ai assistant at {WORKDIR}. Use tools to solve tasks. Act, don't explain.",  # noqa: E501
+            tools=TOOLS,
+        )
+
+        messages.append({"role": "assistant", "content": response.content})
+
+        if response.stop_reason != "tool_use":
+            return response
+
+        tool_results: list[ToolResultBlockParam] = []
+
+        for block in response.content:
+            if block.type == "tool_use":
+                handler = TOOL_HANDLERS[block.name]
+                value, ok = handler(**block.input)
+
+                if block.name == "bash":
+                    prompt = f"$ {block.input['command']}"
+                else:
+                    prompt = f"[{block.name}] {block.input}"
+
+                prompt_color = "33" if ok else "31"  # Yellow, Red
+                print(f"\033[{prompt_color}m{prompt}\033[0m")
+
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": value,
+                    }
+                )
+
+                for line in value.splitlines():
+                    print(f"\033[90m| {line}\033[0m")  # Gray
+
+        messages.append({"role": "user", "content": tool_results})
+
+
+def chat_loop(client: Anthropic, model_id: str, messages: list[MessageParam]):
+    while True:
+        message = input("\033[36m>> \033[0m")  # Cyan
+
+        if message.strip().lower() == "q":
+            break
+
+        messages.append({"role": "user", "content": message})
+
+        response = agent_loop(client, model_id, messages)
+
+        for block in response.content:
+            if block.type == "thinking":
+                print(f"\033[90;3m{block.thinking}\033[0m")  # Gray
+            elif block.type == "text":
+                print(block.text)
+
+
 def main():
     load_dotenv(override=True)
 
@@ -175,63 +238,7 @@ def main():
     client = Anthropic(api_key=api_key, base_url=base_url)
     messages: list[MessageParam] = []
 
-    while True:
-        message = input("\033[36m>> \033[0m")  # Cyan
-
-        if message.strip().lower() == "q":
-            break
-
-        messages.append({"role": "user", "content": message})
-
-        while True:
-            response = client.messages.create(
-                model=model_id,
-                max_tokens=1000,
-                messages=messages,
-                system=f"You are a personal ai assistant at {WORKDIR}. Use tools to solve tasks. Act, don't explain.",  # noqa: E501
-                tools=TOOLS,
-            )
-
-            messages.append({"role": "assistant", "content": response.content})
-
-            if response.stop_reason != "tool_use":
-                break
-
-            tool_results: list[ToolResultBlockParam] = []
-
-            for block in response.content:
-                if block.type == "tool_use":
-                    handler = TOOL_HANDLERS[block.name]
-                    value, ok = handler(**block.input)
-
-                    if block.name == "bash":
-                        prompt = f"$ {block.input['command']}"
-                    else:
-                        prompt = f"[{block.name}] {block.input}"
-
-                    prompt_color = "33" if ok else "31"  # Yellow, Red
-                    print(f"\033[{prompt_color}m{prompt}\033[0m")
-
-                    tool_results.append(
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": value,
-                        }
-                    )
-
-                    for line in value.splitlines():
-                        print(f"\033[90m| {line}\033[0m")  # Gray
-
-            messages.append({"role": "user", "content": tool_results})
-
-        response_content = cast(list[ContentBlock], messages[-1]["content"])
-
-        for block in response_content:
-            if block.type == "thinking":
-                print(f"\033[90;3m{block.thinking}\033[0m")  # Gray
-            elif block.type == "text":
-                print(block.text)
+    chat_loop(client, model_id, messages)
 
 
 if __name__ == "__main__":
