@@ -1,5 +1,11 @@
 # History
 
+## uv
+
+```bash
+uv init . --python 3.10
+```
+
 ## pre-commit
 
 ```bash
