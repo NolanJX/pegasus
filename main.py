@@ -6,7 +6,13 @@ from collections.abc import Callable
 from pathlib import Path
 
 from anthropic import Anthropic
-from anthropic.types import Message, MessageParam, ToolParam, ToolResultBlockParam
+from anthropic.types import (
+    Message,
+    MessageParam,
+    ToolParam,
+    ToolResultBlockParam,
+    ToolUseBlock,
+)
 from dotenv import load_dotenv
 
 
@@ -160,6 +166,43 @@ TOOL_HANDLERS: dict[str, Callable[..., tuple[str, bool]]] = {
     "edit_text_file": replace_first_in_file,
 }
 
+PostUserPromptSubmitHook = Callable[[str], None]
+PreToolUseHook = Callable[[ToolUseBlock], str | None]
+PostToolUseHook = Callable[[ToolUseBlock, tuple[str, bool]], None]
+
+post_user_prompt_submit_hooks: list[PostUserPromptSubmitHook] = []
+pre_tool_use_hooks: list[PreToolUseHook] = []
+post_tool_use_hooks: list[PostToolUseHook] = []
+
+
+def register_post_user_prompt_submit_hook(hook: PostUserPromptSubmitHook) -> None:
+    post_user_prompt_submit_hooks.append(hook)
+
+
+def register_pre_tool_use_hook(hook: PreToolUseHook) -> None:
+    pre_tool_use_hooks.append(hook)
+
+
+def register_post_tool_use_hook(hook: PostToolUseHook) -> None:
+    post_tool_use_hooks.append(hook)
+
+
+def trigger_post_user_prompt_submit_hook(message) -> None:
+    for hook in post_user_prompt_submit_hooks:
+        hook(message)
+
+
+def trigger_pre_tool_use_hook(block: ToolUseBlock) -> str | None:
+    for hook in pre_tool_use_hooks:
+        if (block_reason := hook(block)) is not None:
+            return block_reason
+    return None
+
+
+def trigger_post_tool_use_hook(block: ToolUseBlock, result: tuple[str, bool]) -> None:
+    for hook in post_tool_use_hooks:
+        hook(block, result)
+
 
 def agent_loop(
     client: Anthropic, model_id: str, messages: list[MessageParam]
@@ -182,6 +225,17 @@ def agent_loop(
 
         for block in response.content:
             if block.type == "tool_use":
+                block_reason = trigger_pre_tool_use_hook(block)
+                if block_reason is not None:
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": block_reason,
+                        }
+                    )
+                    continue
+
                 handler = TOOL_HANDLERS[block.name]
                 value, ok = handler(**block.input)
 
@@ -204,6 +258,8 @@ def agent_loop(
                 for line in value.splitlines():
                     print(f"\033[90m| {line}\033[0m")  # Gray
 
+                trigger_post_tool_use_hook(block, (value, ok))
+
         messages.append({"role": "user", "content": tool_results})
 
 
@@ -213,6 +269,8 @@ def chat_loop(client: Anthropic, model_id: str, messages: list[MessageParam]):
 
         if message.strip().lower() == "q":
             break
+
+        trigger_post_user_prompt_submit_hook(message)
 
         messages.append({"role": "user", "content": message})
 
