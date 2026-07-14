@@ -236,16 +236,14 @@ def agent_loop(
                     )
                     continue
 
-                handler = TOOL_HANDLERS[block.name]
-                value, ok = handler(**block.input)
-
                 if block.name == "bash":
                     prompt = f"$ {block.input['command']}"
                 else:
                     prompt = f"[{block.name}] {block.input}"
+                print(f"\033[33m{prompt}\033[0m")  # Yellow
 
-                prompt_color = "33" if ok else "31"  # Yellow, Red
-                print(f"\033[{prompt_color}m{prompt}\033[0m")
+                handler = TOOL_HANDLERS[block.name]
+                value, ok = handler(**block.input)
 
                 tool_results.append(
                     {
@@ -255,8 +253,9 @@ def agent_loop(
                     }
                 )
 
+                value_color = "90" if ok else "31"  # Gray, Red
                 for line in value.splitlines():
-                    print(f"\033[90m| {line}\033[0m")  # Gray
+                    print(f"\033[{value_color}m| {line}\033[0m")
 
                 trigger_post_tool_use_hook(block, (value, ok))
 
