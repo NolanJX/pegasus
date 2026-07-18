@@ -4,6 +4,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, TypedDict
 
 from anthropic import Anthropic
 from anthropic.types import (
@@ -220,6 +221,47 @@ def print_tool_result(_block: ToolUseBlock, result: tuple[str, bool]) -> None:
         print(f"\033[{value_color}m| {line}\033[0m")
 
 
+class ApprovalRule(TypedDict):
+    tools: list[str]
+    match: Callable[[dict[str, Any]], bool]
+    reason: str
+
+
+APPROVAL_RULES: list[ApprovalRule] = [
+    {
+        "tools": ["bash"],
+        "match": lambda tool_input: any(
+            restricted_command in tool_input["command"] for restricted_command in ["rm"]
+        ),
+        "reason": "Restricted command",
+    },
+    {
+        "tools": ["write_text_file", "edit_text_file"],
+        "match": lambda _tool_input: True,
+        "reason": "File write operation",
+    },
+]
+
+
+def approval_reason(tool_name: str, tool_input: dict[str, Any]) -> str | None:
+    for approval_rule in APPROVAL_RULES:
+        if tool_name in approval_rule["tools"] and approval_rule["match"](tool_input):
+            return approval_rule["reason"]
+    return None
+
+
+def approve_tool_use(block: ToolUseBlock) -> str | None:
+    reason = approval_reason(block.name, block.input)
+    if reason is not None:
+        print(f"\033[35m{reason}\033[0m")  # Magenta
+
+        if input("\033[36mAllow? [y/N] \033[0m").strip().lower() != "y":  # Cyan
+            print("\033[31mPermission denied.\033[0m")  # Red
+            return "Error: Permission denied"
+
+    return None
+
+
 def agent_loop(
     client: Anthropic, model_id: str, messages: list[MessageParam]
 ) -> Message:
@@ -299,6 +341,7 @@ def main():
         sys.exit(os.EX_CONFIG)
 
     register_pre_tool_use_hook(print_tool_use)
+    register_pre_tool_use_hook(approve_tool_use)
     register_post_tool_use_hook(print_tool_result)
 
     client = Anthropic(api_key=api_key, base_url=base_url)
