@@ -110,13 +110,27 @@ TOOLS = [
 ]
 
 
+def print_tool_use(tool_call: dict) -> None:
+    if tool_call["name"] == "bash":
+        prompt = f"$ {tool_call['args']['command']}"
+    else:
+        prompt = f"[{tool_call['name']}] {tool_call['args']}"
+    print(f"\033[33m{prompt}\033[0m")  # Yellow
+
+
+def print_tool_result(value: str, ok: bool) -> None:
+    value_color = "90" if ok else "31"  # Gray, Red
+
+    for line in value.splitlines():
+        print(f"\033[{value_color}m| {line}\033[0m")
+
+
 def agent_loop(
     agent, messages: list[AnyMessage]
 ) -> tuple[list[AnyMessage], AIMessage | None]:
     final_message: AIMessage | None = None
 
     seen_message_count = len(messages)
-    pending_tool_prompts: dict[str, str] = {}
 
     stream = agent.stream_events({"messages": messages}, version="v3")
 
@@ -131,24 +145,11 @@ def agent_loop(
             if isinstance(message, AIMessage):
                 if message.tool_calls:
                     for tool_call in message.tool_calls:
-                        if tool_call["name"] == "bash":
-                            prompt = f"$ {tool_call['args']['command']}"
-                        else:
-                            prompt = f"[{tool_call['name']}] {tool_call['args']}"
-
-                        pending_tool_prompts[tool_call["id"]] = prompt
+                        print_tool_use(tool_call)
                 else:
                     final_message = message
             elif isinstance(message, ToolMessage):
-                value = message.content
-                ok = message.artifact
-
-                prompt = pending_tool_prompts.pop(message.tool_call_id)
-                prompt_color = "33" if ok else "31"  # Yellow, Red
-                print(f"\033[{prompt_color}m{prompt}\033[0m")
-
-                for line in value.splitlines():
-                    print(f"\033[90m| {line}\033[0m")  # Gray
+                print_tool_result(message.content, message.artifact)
 
         seen_message_count = len(messages)
 
