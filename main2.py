@@ -2,13 +2,17 @@ import glob
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
+from langchain.agents.middleware import wrap_tool_call
 from langchain.chat_models import init_chat_model
 from langchain.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
 from langchain.tools import tool
+from langchain.tools.tool_node import ToolCallRequest
+from langgraph.types import Command
 
 
 @tool("bash", response_format="content_and_artifact")
@@ -110,19 +114,29 @@ TOOLS = [
 ]
 
 
-def print_tool_use(tool_call: dict) -> None:
+@wrap_tool_call
+def print_tool_call(
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
+    tool_call = request.tool_call
+
     if tool_call["name"] == "bash":
         prompt = f"$ {tool_call['args']['command']}"
     else:
         prompt = f"[{tool_call['name']}] {tool_call['args']}"
     print(f"\033[33m{prompt}\033[0m")  # Yellow
 
+    result = handler(request)
 
-def print_tool_result(value: str, ok: bool) -> None:
-    value_color = "90" if ok else "31"  # Gray, Red
+    if isinstance(result, ToolMessage):
+        value, ok = result.content, result.artifact
+        value_color = "90" if ok else "31"  # Gray, Red
 
-    for line in value.splitlines():
-        print(f"\033[{value_color}m| {line}\033[0m")
+        for line in str(value).splitlines():
+            print(f"\033[{value_color}m| {line}\033[0m")
+
+    return result
 
 
 def agent_loop(
@@ -139,17 +153,8 @@ def agent_loop(
         unseen_messages = messages[seen_message_count:]
 
         for message in unseen_messages:
-            if isinstance(message, HumanMessage):
-                continue
-
-            if isinstance(message, AIMessage):
-                if message.tool_calls:
-                    for tool_call in message.tool_calls:
-                        print_tool_use(tool_call)
-                else:
-                    final_message = message
-            elif isinstance(message, ToolMessage):
-                print_tool_result(message.content, message.artifact)
+            if isinstance(message, AIMessage) and not message.tool_calls:
+                final_message = message
 
         seen_message_count = len(messages)
 
@@ -191,6 +196,7 @@ def main():
         model=init_chat_model(model_id, max_tokens=1000),
         tools=TOOLS,
         system_prompt=f"You are a personal ai assistant at {WORKDIR}. Use tools to solve tasks. Act, don't explain.",  # noqa: E501
+        middleware=[print_tool_call],
     )
     messages: list[AnyMessage] = []
 
