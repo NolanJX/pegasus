@@ -204,6 +204,22 @@ def trigger_post_tool_use_hook(block: ToolUseBlock, result: tuple[str, bool]) ->
         hook(block, result)
 
 
+def print_tool_use(block: ToolUseBlock) -> None:
+    if block.name == "bash":
+        prompt = f"$ {block.input['command']}"
+    else:
+        prompt = f"[{block.name}] {block.input}"
+    print(f"\033[33m{prompt}\033[0m")  # Yellow
+
+
+def print_tool_result(_block: ToolUseBlock, result: tuple[str, bool]) -> None:
+    value, ok = result
+    value_color = "90" if ok else "31"  # Gray, Red
+
+    for line in value.splitlines():
+        print(f"\033[{value_color}m| {line}\033[0m")
+
+
 def agent_loop(
     client: Anthropic, model_id: str, messages: list[MessageParam]
 ) -> Message:
@@ -236,12 +252,6 @@ def agent_loop(
                     )
                     continue
 
-                if block.name == "bash":
-                    prompt = f"$ {block.input['command']}"
-                else:
-                    prompt = f"[{block.name}] {block.input}"
-                print(f"\033[33m{prompt}\033[0m")  # Yellow
-
                 handler = TOOL_HANDLERS[block.name]
                 value, ok = handler(**block.input)
 
@@ -252,10 +262,6 @@ def agent_loop(
                         "content": value,
                     }
                 )
-
-                value_color = "90" if ok else "31"  # Gray, Red
-                for line in value.splitlines():
-                    print(f"\033[{value_color}m| {line}\033[0m")
 
                 trigger_post_tool_use_hook(block, (value, ok))
 
@@ -291,6 +297,9 @@ def main():
 
     if model_id is None or base_url is None or api_key is None:
         sys.exit(os.EX_CONFIG)
+
+    register_pre_tool_use_hook(print_tool_use)
+    register_post_tool_use_hook(print_tool_result)
 
     client = Anthropic(api_key=api_key, base_url=base_url)
     messages: list[MessageParam] = []
