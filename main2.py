@@ -4,6 +4,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any, TypedDict
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
@@ -139,6 +140,53 @@ def print_tool_call(
     return result
 
 
+class ApprovalRule(TypedDict):
+    tools: list[str]
+    match: Callable[[dict[str, Any]], bool]
+    reason: str
+
+
+APPROVAL_RULES: list[ApprovalRule] = [
+    {
+        "tools": ["bash"],
+        "match": lambda tool_input: any(
+            restricted_command in tool_input["command"] for restricted_command in ["rm"]
+        ),
+        "reason": "Restricted command",
+    },
+    {
+        "tools": ["write_text_file", "edit_text_file"],
+        "match": lambda _tool_input: True,
+        "reason": "File write operation",
+    },
+]
+
+
+def approval_reason(tool_name: str, tool_input: dict[str, Any]) -> str | None:
+    for approval_rule in APPROVAL_RULES:
+        if tool_name in approval_rule["tools"] and approval_rule["match"](tool_input):
+            return approval_rule["reason"]
+    return None
+
+
+@wrap_tool_call
+def approve_tool_call(
+    request: ToolCallRequest,
+    handler: Callable[[ToolCallRequest], ToolMessage | Command],
+) -> ToolMessage | Command:
+    tool_call = request.tool_call
+    reason = approval_reason(tool_call["name"], tool_call["args"])
+    if reason is not None:
+        print(f"\033[35m{reason}\033[0m")  # Magenta
+
+        if input("\033[36mAllow? [y/N] \033[0m").strip().lower() != "y":  # Cyan
+            return ToolMessage(
+                "Error: Permission denied", tool_call_id=tool_call["id"], artifact=False
+            )
+
+    return handler(request)
+
+
 def agent_loop(
     agent, messages: list[AnyMessage]
 ) -> tuple[list[AnyMessage], AIMessage | None]:
@@ -196,7 +244,7 @@ def main():
         model=init_chat_model(model_id, max_tokens=1000),
         tools=TOOLS,
         system_prompt=f"You are a personal ai assistant at {WORKDIR}. Use tools to solve tasks. Act, don't explain.",  # noqa: E501
-        middleware=[print_tool_call],
+        middleware=[print_tool_call, approve_tool_call],
     )
     messages: list[AnyMessage] = []
 
