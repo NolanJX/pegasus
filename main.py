@@ -230,10 +230,8 @@ class ApprovalRule(TypedDict):
 APPROVAL_RULES: list[ApprovalRule] = [
     {
         "tools": ["bash"],
-        "match": lambda tool_input: any(
-            restricted_command in tool_input["command"] for restricted_command in ["rm"]
-        ),
-        "reason": "Restricted command",
+        "match": lambda _tool_input: True,
+        "reason": "Bash command",
     },
     {
         "tools": ["write_text_file", "edit_text_file"],
