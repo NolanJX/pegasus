@@ -1493,6 +1493,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "langchain", extra = ["deepseek", "openai"] },
     { name = "python-dotenv" },
+    { name = "rich" },
     { name = "textual" },
 ]
 
@@ -1509,6 +1510,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.109.1" },
     { name = "langchain", extras = ["deepseek", "openai"], specifier = ">=1.3.11" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "textual", specifier = ">=8.2.8" },
 ]
 
